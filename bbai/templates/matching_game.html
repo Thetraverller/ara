@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Matching Game</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .matching-game {
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+        .matching-game div {
+            width: 45%;
+            margin-bottom: 10px;
+        }
+        .matching-game .questions, .matching-game .answers {
+            display: flex;
+            flex-direction: column;
+        }
+        .matching-game .questions div, .matching-game .answers div {
+            padding: 10px;
+            border: 1px solid #ddd;
+            margin-bottom: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border-radius: 5px; /* Rounded corners for a modern look */
+        }
+        .matching-game .questions .selected, .matching-game .answers .selected {
+            box-shadow: 0 0 15px rgba(0, 0, 255, 0.8); /* Blue glow */
+            background-color: rgba(0, 0, 255, 0.1); /* Slight blue background for contrast */
+        }
+        .matching-game .questions .correct, .matching-game .answers .correct {
+            box-shadow: 0 0 15px rgba(0, 255, 0, 0.8); /* Green glow */
+            background-color: rgba(0, 255, 0, 0.1); /* Slight green background for contrast */
+            cursor: default; /* Make it unselectable */
+        }
+        .matching-game .questions .incorrect, .matching-game .answers .incorrect {
+            box-shadow: 0 0 15px rgba(255, 0, 0, 0.8); /* Red glow */
+            background-color: rgba(255, 0, 0, 0.1); /* Slight red background for contrast */
+        }
+        .matching-game .questions .unselectable, .matching-game .answers .unselectable {
+            cursor: not-allowed; /* Indicate that the item is unselectable */
+        }
+        #counter-container {
+            margin-top: 20px;
+            padding: 10px;
+            border-top: 2px solid #ddd;
+            background-color: #f9f9f9;
+        }
+        #attempts-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        #attempts-list li {
+            margin-bottom: 5px;
+        }
+        .overall-counter-value {
+            font-weight: bold;
+        }
+    </style>
+    
+    
+</head>
+<body>
+    <h1>Matching Game</h1>
+    <p>Match each question with the correct answer:</p>
+    <div class="matching-game">
+        <div class="questions">
+            <h2>Questions</h2>
+            {% for flashcard in flashcards %}
+                <div data-id="{{ flashcard['id'] }}" class="question">
+                    {{ flashcard['question'] }}
+                </div>
+            {% endfor %}
+        </div>
+        <div class="answers">
+            <h2>Answers</h2>
+            {% for flashcard in flashcards %}
+                <div data-id="{{ flashcard['id'] }}" class="answer">{{ flashcard['answer'] }}</div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div id="counter-container">
+        <h2>Attempts by Question</h2>
+        <ul id="attempts-list">
+            {% for flashcard in flashcards %}
+                <li data-id="{{ flashcard['id'] }}">
+                    {{ loop.index }}: <span class="attempts-counter">0</span> attempts, 
+                    <span class="matches-counter">0</span> matches
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <div id="overall-counter">
+        <h2>Special Condition Counter</h2>
+        <p>The number of times both matches and attempts equal 1: <span class="overall-counter-value">0</span></p>
+    </div>
+    
+    <a href="{{ url_for('index') }}">Back to Home</a>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const questions = document.querySelectorAll('.question');
+            const answers = document.querySelectorAll('.answer');
+            let selectedQuestion = null;
+            let selectedAnswer = null;
+            let specialConditionCounter = 0;
+    
+            function resetSelection() {
+                selectedQuestion = null;
+                selectedAnswer = null;
+                questions.forEach(q => {
+                    if (!q.classList.contains('correct')) {
+                        q.classList.remove('selected', 'incorrect');
+                        q.classList.remove('unselectable');
+                    }
+                });
+                answers.forEach(a => {
+                    if (!a.classList.contains('correct')) {
+                        a.classList.remove('selected', 'incorrect');
+                        a.classList.remove('unselectable');
+                    }
+                });
+            }
+    
+            function updateAttemptsCounter(questionId) {
+                const attemptElement = document.querySelector(`#attempts-list li[data-id="${questionId}"] .attempts-counter`);
+                if (attemptElement) {
+                    let attempts = parseInt(attemptElement.textContent);
+                    attempts++;
+                    attemptElement.textContent = attempts;
+                    return attempts; // Return the updated attempt count
+                }
+                return 0;
+            }
+    
+            function updateMatchesCounter(questionId) {
+                const matchesElement = document.querySelector(`#attempts-list li[data-id="${questionId}"] .matches-counter`);
+                if (matchesElement) {
+                    let matches = parseInt(matchesElement.textContent);
+                    matches++;
+                    matchesElement.textContent = matches;
+                    return matches; // Return the updated match count
+                }
+                return 0;
+            }
+    
+            function updateSpecialConditionCounter() {
+                specialConditionCounter++;
+                document.querySelector('.overall-counter-value').textContent = specialConditionCounter;
+            }
+    
+            function checkMatch() {
+                const questionId = selectedQuestion.dataset.id;
+                const answerId = selectedAnswer.dataset.id;
+    
+                // Always update the attempts counter on each attempt
+                const attemptCount = updateAttemptsCounter(questionId);
+    
+                if (questionId === answerId) {
+                    selectedQuestion.classList.add('correct');
+                    selectedAnswer.classList.add('correct');
+                    selectedQuestion.classList.add('unselectable');
+                    selectedAnswer.classList.add('unselectable');
+                    
+                    // Update the match counter
+                    const matchCount = updateMatchesCounter(questionId);
+    
+                    // Check if both attempts and matches are exactly 1
+                    if (attemptCount === 1 && matchCount === 1) {
+                        updateSpecialConditionCounter();
+                    }
+                } else {
+                    selectedQuestion.classList.add('incorrect');
+                    selectedAnswer.classList.add('incorrect');
+                }
+                
+                setTimeout(() => resetSelection(), 1000);
+            }
+    
+            questions.forEach(question => {
+                question.addEventListener('click', () => {
+                    if (question.classList.contains('unselectable')) return;
+                    if (selectedQuestion) {
+                        selectedQuestion.classList.remove('selected');
+                    }
+                    selectedQuestion = question;
+                    question.classList.add('selected');
+                    if (selectedAnswer) {
+                        checkMatch();
+                    }
+                });
+            });
+    
+            answers.forEach(answer => {
+                answer.addEventListener('click', () => {
+                    if (answer.classList.contains('unselectable')) return;
+                    if (selectedAnswer) {
+                        selectedAnswer.classList.remove('selected');
+                    }
+                    selectedAnswer = answer;
+                    answer.classList.add('selected');
+                    if (selectedQuestion) {
+                        checkMatch();
+                    }
+                });
+            });
+        });
+    </script>
+    
+    
+
+</body>
+</html>

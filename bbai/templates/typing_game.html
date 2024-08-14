@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Typing Game</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <style>
+        .typing-game {
+            max-width: 800px;
+            margin: auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+            background-color: #fff;
+        }
+        .typing-game h2 {
+            margin-bottom: 20px;
+        }
+        .typing-game .question-container {
+            margin-bottom: 15px;
+        }
+        .typing-game .question-container label {
+            display: block;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .typing-game .question-container input[type="text"], 
+        .typing-game .question-container select {
+            width: calc(100% - 22px);
+            padding: 10px;
+            font-size: 1em;
+            border: 1px solid #ddd;
+        }
+        .typing-game .question-container.correct input,
+        .typing-game .question-container.correct select {
+            border-color: green;
+        }
+        .typing-game .question-container.incorrect input,
+        .typing-game .question-container.incorrect select {
+            border-color: red;
+        }
+        .typing-game .feedback {
+            font-size: 1.2em;
+            margin-top: 20px;
+        }
+        .feedback.correct {
+            color: green;
+        }
+        .feedback.incorrect {
+            color: red;
+        }
+        .correct-answers {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            background-color: #f9f9f9;
+        }
+        .correct-answers h3 {
+            margin-top: 0;
+        }
+        .correct-answers ul {
+            list-style-type: none;
+            padding: 0;
+        }
+        .correct-answers li {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Typing Game</h1>
+    <div class="typing-game">
+        <h2>Type the answer for each question:</h2>
+        <div id="questions-list">
+            {% for flashcard in flashcards %}
+                <div class="question-container" data-id="{{ flashcard['id'] }}" data-answer="{{ flashcard['answer'] }}">
+                    <label for="question-{{ flashcard['id'] }}">{{ flashcard['question'] }}</label>
+                    {% if flashcard['arabic'] == 'y' %}
+                        <select id="question-{{ flashcard['id'] }}" class="answer-input dropdown">
+                            <option value="" disabled selected>Select your answer</option>
+                            <option value="{{ flashcard['answer'] }}">Correct Option</option>
+                            <option value="option1">Option 1</option>
+                            <option value="option2">Option 2</option>
+                            <option value="option3">Option 3</option>
+                        </select>
+                    {% else %}
+                        <input type="text" id="question-{{ flashcard['id'] }}" class="answer-input" placeholder="Type your answer here...">
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+        <div class="feedback" id="feedback"></div>
+        <button id="submit-btn">Submit Answers</button>
+        <div class="correct-answers" id="correct-answers" style="display: none;">
+            <h3>Correct Answers</h3>
+            <ul id="correct-answers-list"></ul>
+        </div>
+    </div>
+    <a href="{{ url_for('index') }}">Back to Home</a>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const answerInputs = document.querySelectorAll('.answer-input');
+            const submitBtn = document.getElementById('submit-btn');
+            const feedback = document.getElementById('feedback');
+            const correctAnswersDiv = document.getElementById('correct-answers');
+            const correctAnswersList = document.getElementById('correct-answers-list');
+            let questionAttemptCount = {};
+            let questionAnswerMap = {};
+    
+            // Initialize question-answer map
+            document.querySelectorAll('.question-container').forEach(container => {
+                const questionId = container.dataset.id;
+                const answerInput = container.querySelector('.answer-input');
+                if (answerInput.tagName === 'SELECT') {
+                    questionAnswerMap[questionId] = answerInput.value.trim();  // Store the selected option
+                } else {
+                    questionAnswerMap[questionId] = answerInput.value.trim();
+                }
+            });
+    
+            // Levenshtein distance function
+            function levenshteinDistance(a, b) {
+                const an = a ? a.length : 0;
+                const bn = b ? b.length : 0;
+                if (an === 0) return bn;
+                if (bn === 0) return an;
+    
+                const matrix = [];
+    
+                // Increment along the first column of each row
+                for (let i = 0; i <= bn; i++) {
+                    matrix[i] = [i];
+                }
+    
+                // Increment each column in the first row
+                for (let j = 0; j <= an; j++) {
+                    matrix[0][j] = j;
+                }
+    
+                // Fill in the rest of the matrix
+                for (let i = 1; i <= bn; i++) {
+                    for (let j = 1; j <= an; j++) {
+                        if (b.charAt(i - 1) == a.charAt(j - 1)) {
+                            matrix[i][j] = matrix[i - 1][j - 1];
+                        } else {
+                            matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, // substitution
+                                                    Math.min(matrix[i][j - 1] + 1, // insertion
+                                                             matrix[i - 1][j] + 1)); // deletion
+                        }
+                    }
+                }
+    
+                return matrix[bn][an];
+            }
+    
+            // Function to remove Arabic diacritics
+            function removeDiacritics(str) {
+                return str.normalize('NFKD').replace(/[\u064B-\u0652]/g, '');
+            }
+    
+            function getAnswersFromInputs() {
+                answerInputs.forEach(input => {
+                    const questionId = input.id.split('-')[1];
+                    if (input.tagName === 'SELECT') {
+                        questionAnswerMap[questionId] = input.value.trim();  // Handle dropdowns
+                    } else {
+                        questionAnswerMap[questionId] = input.value.trim();  // Handle text inputs
+                    }
+                });
+            }
+    
+            function checkAnswers() {
+                getAnswersFromInputs();
+                let allCorrect = true;
+    
+                // Clear previous correct answers list
+                correctAnswersList.innerHTML = '';
+    
+                for (let questionId in questionAnswerMap) {
+                    const userAnswer = questionAnswerMap[questionId];
+                    const correctAnswer = document.querySelector(`.question-container[data-id="${questionId}"]`).dataset.answer;
+    
+                    const container = document.querySelector(`.question-container[data-id="${questionId}"]`);
+                    const input = container.querySelector('.answer-input');
+    
+                    let isCorrect = false;
+    
+                    if (input.tagName === 'SELECT') {
+                        // Exact match required for dropdowns
+                        isCorrect = userAnswer === correctAnswer;
+                    } else {
+                        // Remove diacritics if the answer is Arabic
+                        const cleanUserAnswer = removeDiacritics(userAnswer);
+                        const cleanCorrectAnswer = removeDiacritics(correctAnswer);
+    
+                        // Allow typo tolerance for text inputs using Levenshtein distance
+                        const distance = levenshteinDistance(cleanUserAnswer.toLowerCase(), cleanCorrectAnswer.toLowerCase());
+                        const threshold = Math.floor(cleanCorrectAnswer.length * 0.3);
+                        isCorrect = distance <= threshold;
+                    }
+    
+                    // Remove any existing classes for correct or incorrect answers
+                    container.classList.remove('correct', 'incorrect');
+    
+                    if (isCorrect) {
+                        container.classList.add('correct');
+                    } else {
+                        allCorrect = false;
+                        container.classList.add('incorrect');
+                    }
+    
+                    // Add correct answer to the list
+                    const listItem = document.createElement('li');
+                    listItem.textContent = `${document.querySelector(`.question-container[data-id="${questionId}"] label`).textContent} - Correct Answer: ${correctAnswer}`;
+                    correctAnswersList.appendChild(listItem);
+                }
+    
+                if (allCorrect) {
+                    feedback.textContent = 'All answers are correct!';
+                    feedback.className = 'feedback correct';
+                } else {
+                    feedback.textContent = 'Some answers are incorrect. Please try again.';
+                    feedback.className = 'feedback incorrect';
+                }
+    
+                // Show correct answers section
+                correctAnswersDiv.style.display = 'block';
+            }
+    
+            submitBtn.addEventListener('click', checkAnswers);
+        });
+    </script>
+    
+    
+</body>
+</html>

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flashcard App</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <h1>Flashcard App</h1>
+    <ul>
+        {% for flashcard in flashcards %}
+            <li><a href="{{ url_for('flashcard', flashcard_id=flashcard['id']) }}">{{ flashcard['question'] }}</a></li>
+        {% endfor %}
+    </ul>
+    <hr>
+    <h2>Lessons</h2>
+    <ul>
+        <li><a href="{{ url_for('lesson_one') }}">Lesson One - Words</a></li>
+        <li><a href="{{ url_for('matching_game') }}">Matching Game</a></li>
+        <li><a href="{{ url_for('typing_game') }}">Typing Game</a></li>
+    </ul>
+</body>
+</html>
